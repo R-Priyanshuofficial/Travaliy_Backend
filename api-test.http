@@ -1,0 +1,125 @@
+### ============================================
+### Travaily Auth API - Testing File
+### Use with VS Code "REST Client" extension
+### Run each request in order (top to bottom)
+### ============================================
+
+@baseUrl = http://localhost:3000
+
+
+### ─── 1. SIGNUP ─────────────────────────────────
+### Creates a new user + generates OTP (check terminal for OTP)
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "password": "secret123"
+}
+
+### ─── 2. SIGNUP (Duplicate - Should return 400) ──
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "password": "secret123"
+}
+
+### ─── 3. SIGNUP (Validation Error - Should return 400) ──
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+  "name": "",
+  "email": "not-an-email",
+  "password": "123"
+}
+
+### ─── 4. LOGIN ──────────────────────────────────
+### Returns JWT token - copy it for protected routes later
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "password": "secret123"
+}
+
+### ─── 5. LOGIN (Wrong Password - Should return 401) ──
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "password": "wrongpassword"
+}
+
+### ─── 6. LOGIN (Non-existent User - Should return 401) ──
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "nobody@example.com",
+  "password": "secret123"
+}
+
+### ─── 7. SEND OTP ───────────────────────────────
+### Check your terminal console for the OTP code
+POST {{baseUrl}}/auth/send-otp
+Content-Type: application/json
+
+{
+  "email": "john@example.com"
+}
+
+### ─── 8. VERIFY OTP ─────────────────────────────
+### Replace "123456" with the OTP from your terminal
+POST {{baseUrl}}/auth/verify-otp
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "code": "123456"
+}
+
+### ─── 9. VERIFY OTP (Invalid Code - Should return 400) ──
+POST {{baseUrl}}/auth/verify-otp
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "code": "000000"
+}
+
+### ─── 10. FORGOT PASSWORD ───────────────────────
+### Check your terminal console for the reset OTP
+POST {{baseUrl}}/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "john@example.com"
+}
+
+### ─── 11. RESET PASSWORD ────────────────────────
+### Replace "123456" with the OTP from your terminal
+POST {{baseUrl}}/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "code": "123456",
+  "newPassword": "newSecret456"
+}
+
+### ─── 12. LOGIN WITH NEW PASSWORD ───────────────
+### Verify the password was actually changed
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "password": "newSecret456"
+}
