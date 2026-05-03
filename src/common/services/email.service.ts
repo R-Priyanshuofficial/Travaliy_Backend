@@ -1,41 +1,49 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private readonly transporter: nodemailer.Transporter;
-
-  constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: 'smtp-relay.brevo.com',
-      port: 587,
-      secure: false, // TLS upgrade happens via STARTTLS
-      auth: {
-        user: process.env.BREVO_SMTP_USER,
-        pass: process.env.BREVO_SMTP_PASS,
-      },
-    });
-  }
 
   /**
-   * Send an OTP verification email to the user.
+   * Send an OTP verification email using Brevo HTTP API (no IP restrictions).
    */
   async sendOtpEmail(to: string, otp: string): Promise<void> {
-    const senderEmail = process.env.SENDER_EMAIL || 'noreply@travaily.com';
+    const senderEmail = process.env.SENDER_EMAIL || 'testpriyanshu72@gmail.com';
+    const apiKey = process.env.BREVO_API_KEY;
 
-    const mailOptions: nodemailer.SendMailOptions = {
-      from: `"Travaily" <${senderEmail}>`,
-      to,
+    if (!apiKey) {
+      this.logger.error('❌ BREVO_API_KEY is not set in environment variables');
+      throw new InternalServerErrorException('Email service is not configured.');
+    }
+
+    const payload = {
+      sender: { name: 'Travaily', email: senderEmail },
+      to: [{ email: to }],
       subject: 'Your OTP Code — Travaily',
-      html: this.buildOtpEmailHtml(otp),
+      htmlContent: this.buildOtpEmailHtml(otp),
     };
 
     try {
-      const info = await this.transporter.sendMail(mailOptions);
-      this.logger.log(`✅ OTP email sent to ${to} (messageId: ${info.messageId})`);
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'api-key': apiKey,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        this.logger.error(`❌ Brevo API error (${response.status}): ${errorBody}`);
+        throw new Error(`Brevo API returned status ${response.status}: ${errorBody}`);
+      }
+
+      const data = await response.json() as { messageId?: string };
+      this.logger.log(`✅ OTP email sent to ${to} (messageId: ${data.messageId})`);
     } catch (error) {
-      this.logger.error(`❌ Failed to send OTP email to ${to}`, (error as Error).stack);
+      this.logger.error(`❌ Failed to send OTP email to ${to}`, (error as Error).message);
       throw new InternalServerErrorException(
         'Failed to send OTP email. Please try again later.',
       );
@@ -75,7 +83,7 @@ export class EmailService {
                     Verification Code
                   </h2>
                   <p style="margin: 0 0 24px 0; color: #64748b; font-size: 14px; line-height: 1.6;">
-                    Use the code below to complete your verification. This code is valid for <strong>10 minutes</strong>.
+                    Use the code below to complete your verification. This code is valid for <strong>5 minutes</strong>.
                   </p>
 
                   <!-- OTP Code -->
