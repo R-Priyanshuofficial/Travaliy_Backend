@@ -25,7 +25,7 @@
       "name": "Auth",
       "item": [
         {
-          "name": "Signup",
+          "name": "1. Send OTP (Signup)",
           "request": {
             "method": "POST",
             "header": [
@@ -36,61 +36,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/signup",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "signup"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Login",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/auth/login",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "login"
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Send OTP",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"test@example.com\"\n}"
+              "raw": "{\n  \"email\": \"testuser@example.com\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/send-otp",
@@ -106,7 +52,7 @@
           "response": []
         },
         {
-          "name": "Verify OTP",
+          "name": "2. Verify OTP (Complete Signup)",
           "request": {
             "method": "POST",
             "header": [
@@ -117,7 +63,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"test@example.com\",\n  \"code\": \"123456\"\n}"
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"testuser@example.com\",\n  \"password\": \"password123\",\n  \"otp\": \"123456\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/verify-otp",
@@ -133,7 +79,7 @@
           "response": []
         },
         {
-          "name": "Forgot Password",
+          "name": "3. Login",
           "request": {
             "method": "POST",
             "header": [
@@ -144,7 +90,34 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"test@example.com\"\n}"
+              "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "4. Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"testuser@example.com\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/forgot-password",
@@ -160,7 +133,7 @@
           "response": []
         },
         {
-          "name": "Reset Password",
+          "name": "5. Reset Password",
           "request": {
             "method": "POST",
             "header": [
@@ -171,7 +144,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"test@example.com\",\n  \"code\": \"123456\",\n  \"newPassword\": \"newpassword123\"\n}"
+              "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"otp\": \"123456\",\n  \"newPassword\": \"newpassword123\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/reset-password",
