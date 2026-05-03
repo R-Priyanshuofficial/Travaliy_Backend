@@ -8,7 +8,7 @@ export class ResetPasswordDto {
   @IsString()
   @Length(6, 6, { message: 'OTP must be exactly 6 digits' })
   @IsNotEmpty({ message: 'OTP code is required' })
-  code!: string;
+  otp!: string;
 
   @IsString()
   @MinLength(6, { message: 'New password must be at least 6 characters long' })

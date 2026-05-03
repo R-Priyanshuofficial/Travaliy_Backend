@@ -9,7 +9,6 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../common/services/email.service';
 import {
-  SignupDto,
   LoginDto,
   SendOtpDto,
   VerifyOtpDto,
@@ -21,55 +20,13 @@ import {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly SALT_ROUNDS = 10;
-  private readonly OTP_EXPIRY_MINUTES = 10;
-  private readonly MAX_OTP_PER_MINUTE = 3;
-
-  /**
-   * In-memory rate limiter: email → [timestamp, timestamp, ...]
-   * Tracks OTP request timestamps per email to prevent abuse.
-   */
-  private readonly otpRateLimit = new Map<string, number[]>();
+  private readonly OTP_EXPIRY_MINUTES = 5;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
   ) {}
-
-  // ─── Signup ──────────────────────────────────────────────────────────
-
-  async signup(dto: SignupDto) {
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
-
-    if (existingUser) {
-      throw new BadRequestException('User with this email already exists');
-    }
-
-    const hashedPassword = await bcrypt.hash(dto.password, this.SALT_ROUNDS);
-
-    const user = await this.prisma.user.create({
-      data: {
-        name: dto.name,
-        email: dto.email,
-        password: hashedPassword,
-      },
-    });
-
-    // Generate, hash, store, and send OTP
-    const otpCode = this.generateOtp();
-    await this.storeOtp(user.id, otpCode);
-    await this.emailService.sendOtpEmail(user.email, otpCode);
-
-    this.logger.log(`New user registered: ${user.email}`);
-
-    return {
-      success: true,
-      message: 'User registered successfully. Please verify your email with the OTP sent.',
-      user: this.excludePassword(user),
-    };
-  }
 
   // ─── Login ───────────────────────────────────────────────────────────
 
@@ -80,6 +37,10 @@ export class AuthService {
 
     if (!user) {
       throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (!user.isVerified) {
+      throw new BadRequestException('Please verify your email first');
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
@@ -99,23 +60,23 @@ export class AuthService {
     };
   }
 
-  // ─── Send OTP ────────────────────────────────────────────────────────
+  // ─── Send OTP (For Signup) ───────────────────────────────────────────
 
   async sendOtp(dto: SendOtpDto) {
-    const user = await this.prisma.user.findUnique({
+    const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
-    if (!user) {
-      throw new BadRequestException('User with this email does not exist');
+    if (existingUser) {
+      throw new BadRequestException('User already exists');
     }
 
     // Rate limiting check
-    this.checkOtpRateLimit(dto.email);
+    await this.checkOtpRateLimit(dto.email);
 
     const otpCode = this.generateOtp();
-    await this.storeOtp(user.id, otpCode);
-    await this.emailService.sendOtpEmail(user.email, otpCode);
+    await this.storeOtp(dto.email, otpCode);
+    await this.emailService.sendOtpEmail(dto.email, otpCode);
 
     return {
       success: true,
@@ -123,33 +84,44 @@ export class AuthService {
     };
   }
 
-  // ─── Verify OTP ──────────────────────────────────────────────────────
+  // ─── Verify OTP & Complete Signup ────────────────────────────────────
 
   async verifyOtp(dto: VerifyOtpDto) {
-    const user = await this.prisma.user.findUnique({
+    const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
-    if (!user) {
-      throw new BadRequestException('User with this email does not exist');
+    if (existingUser) {
+      throw new BadRequestException('User already exists');
     }
 
-    await this.validateOtp(user.id, dto.code);
+    // Validate OTP (throws if invalid/expired)
+    await this.validateOtp(dto.email, dto.otp);
 
-    // Mark user as verified
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { isVerified: true },
+    // Hash password
+    const hashedPassword = await bcrypt.hash(dto.password, this.SALT_ROUNDS);
+
+    // Create User in DB
+    const user = await this.prisma.user.create({
+      data: {
+        name: dto.name,
+        email: dto.email,
+        password: hashedPassword,
+        isVerified: true,
+      },
     });
 
     // Delete used OTP
-    await this.prisma.oTP.deleteMany({
-      where: { userId: user.id },
+    await this.prisma.otp.deleteMany({
+      where: { email: dto.email },
     });
+
+    this.logger.log(`New user registered: ${user.email}`);
 
     return {
       success: true,
-      message: 'Email verified successfully',
+      message: 'Registration and email verification successful',
+      user: this.excludePassword(user),
     };
   }
 
@@ -165,11 +137,11 @@ export class AuthService {
     }
 
     // Rate limiting check
-    this.checkOtpRateLimit(dto.email);
+    await this.checkOtpRateLimit(dto.email);
 
     const otpCode = this.generateOtp();
-    await this.storeOtp(user.id, otpCode);
-    await this.emailService.sendOtpEmail(user.email, otpCode);
+    await this.storeOtp(dto.email, otpCode);
+    await this.emailService.sendOtpEmail(dto.email, otpCode);
 
     return {
       success: true,
@@ -188,7 +160,7 @@ export class AuthService {
       throw new BadRequestException('User with this email does not exist');
     }
 
-    await this.validateOtp(user.id, dto.code);
+    await this.validateOtp(dto.email, dto.otp);
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, this.SALT_ROUNDS);
 
@@ -198,8 +170,8 @@ export class AuthService {
     });
 
     // Delete used OTP
-    await this.prisma.oTP.deleteMany({
-      where: { userId: user.id },
+    await this.prisma.otp.deleteMany({
+      where: { email: dto.email },
     });
 
     return {
@@ -220,25 +192,25 @@ export class AuthService {
 
   /**
    * Hash the OTP and store it in the database with an expiry window.
-   * Deletes any previous OTPs for the user before creating a new one.
+   * Deletes any previous OTPs for the email before creating a new one.
    */
-  private async storeOtp(userId: string, code: string): Promise<void> {
-    // Delete any existing OTPs for this user to keep only the latest
-    await this.prisma.oTP.deleteMany({
-      where: { userId },
+  private async storeOtp(email: string, otp: string): Promise<void> {
+    // Delete any existing OTPs for this email to keep only the latest
+    await this.prisma.otp.deleteMany({
+      where: { email },
     });
 
     // Hash the OTP before storing (security: OTP not readable in DB)
-    const hashedOtp = await bcrypt.hash(code, this.SALT_ROUNDS);
+    const hashedOtp = await bcrypt.hash(otp, this.SALT_ROUNDS);
 
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + this.OTP_EXPIRY_MINUTES);
 
-    await this.prisma.oTP.create({
+    await this.prisma.otp.create({
       data: {
-        code: hashedOtp,
+        otp: hashedOtp,
         expiresAt,
-        userId,
+        email,
       },
     });
   }
@@ -247,24 +219,24 @@ export class AuthService {
    * Validate an OTP against the database using bcrypt.compare.
    * Throws BadRequestException if OTP is invalid or expired.
    */
-  private async validateOtp(userId: string, code: string): Promise<void> {
-    const otp = await this.prisma.oTP.findFirst({
-      where: { userId },
+  private async validateOtp(email: string, otp: string): Promise<void> {
+    const otpRecord = await this.prisma.otp.findFirst({
+      where: { email },
       orderBy: { createdAt: 'desc' },
     });
 
-    if (!otp) {
+    if (!otpRecord) {
       throw new BadRequestException('Invalid OTP');
     }
 
     // Check expiry first
-    if (new Date() > otp.expiresAt) {
-      await this.prisma.oTP.delete({ where: { id: otp.id } });
-      throw new BadRequestException('OTP has expired. Please request a new one');
+    if (new Date() > otpRecord.expiresAt) {
+      await this.prisma.otp.delete({ where: { id: otpRecord.id } });
+      throw new BadRequestException('OTP expired');
     }
 
     // Compare submitted OTP with hashed OTP in database
-    const isValid = await bcrypt.compare(code, otp.code);
+    const isValid = await bcrypt.compare(otp, otpRecord.otp);
 
     if (!isValid) {
       throw new BadRequestException('Invalid OTP');
@@ -272,27 +244,20 @@ export class AuthService {
   }
 
   /**
-   * Basic rate limiter: max 3 OTP requests per email per minute.
-   * Uses an in-memory Map to track request timestamps.
+   * Database rate limiter: max 1 OTP request per email per 60 seconds.
    */
-  private checkOtpRateLimit(email: string): void {
-    const now = Date.now();
-    const oneMinuteAgo = now - 60 * 1000;
+  private async checkOtpRateLimit(email: string): Promise<void> {
+    const lastOtp = await this.prisma.otp.findFirst({
+      where: { email },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    // Get existing timestamps, filter to only those within the last minute
-    const timestamps = (this.otpRateLimit.get(email) || []).filter(
-      (t) => t > oneMinuteAgo,
-    );
-
-    if (timestamps.length >= this.MAX_OTP_PER_MINUTE) {
-      throw new BadRequestException(
-        'Too many OTP requests. Please wait a minute before trying again.',
-      );
+    if (lastOtp) {
+      const timeSinceLastOtp = Date.now() - lastOtp.createdAt.getTime();
+      if (timeSinceLastOtp < 60000) { // 60 seconds
+        throw new BadRequestException('Please wait before requesting OTP again');
+      }
     }
-
-    // Record this request
-    timestamps.push(now);
-    this.otpRateLimit.set(email, timestamps);
   }
 
   /**

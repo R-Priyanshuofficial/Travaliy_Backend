@@ -14,16 +14,12 @@ model User {
   password   String
   isVerified Boolean  @default(false)
   createdAt  DateTime @default(now())
-
-  otps       OTP[]
 }
 
-model OTP {
-  id        String   @id @default(cuid())
-  code      String
+model Otp {
+  id        String   @id @default(uuid())
+  email     String
+  otp       String
   expiresAt DateTime
   createdAt DateTime @default(now())
-
-  userId    String
-  user      User @relation(fields: [userId], references: [id])
 }
