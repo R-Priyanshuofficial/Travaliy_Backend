@@ -269,6 +269,7 @@ export class AuthService {
     email: string;
     password: string;
     isVerified: boolean;
+    profileImage: string | null;
     createdAt: Date;
   }) {
     const { password, ...userWithoutPassword } = user;
