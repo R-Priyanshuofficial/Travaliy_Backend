@@ -7,6 +7,8 @@ import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CommonModule } from './common/common.module';
 import { ProfileModule } from './profile/profile.module';
+import { AiModule } from './ai/ai.module';
+import { TripModule } from './trip/trip.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { ProfileModule } from './profile/profile.module';
     CommonModule,
     AuthModule,
     ProfileModule,
+    AiModule,
+    TripModule,
   ],
   controllers: [AppController],
   providers: [AppService],
