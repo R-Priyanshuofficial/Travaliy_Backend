@@ -9,6 +9,7 @@ import { CommonModule } from './common/common.module';
 import { ProfileModule } from './profile/profile.module';
 import { AiModule } from './ai/ai.module';
 import { TripModule } from './trip/trip.module';
+import { ExpenseModule } from './expense/expense.module';
 
 @Module({
   imports: [
@@ -22,8 +23,10 @@ import { TripModule } from './trip/trip.module';
     ProfileModule,
     AiModule,
     TripModule,
+    ExpenseModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
+
